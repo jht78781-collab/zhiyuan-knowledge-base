@@ -1,0 +1,59 @@
+spring:
+  config:
+    import: "optional:file:../.env[.properties],optional:file:./.env[.properties]"
+  datasource:
+    url: ${DB_URL:jdbc:mariadb://127.0.0.1:3307/enterprise_kb}
+    username: ${DB_USER:enterprise_kb}
+    password: ${DB_PASSWORD:}
+    hikari:
+      connection-init-sql: SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate.jdbc.time_zone: UTC
+  flyway:
+    enabled: true
+    locations: ${APP_MIGRATIONS:classpath:db/migration}
+    fail-on-missing-locations: false
+    baseline-on-migrate: false
+  servlet:
+    multipart:
+      max-file-size: ${APP_UPLOAD_LIMIT:15MB}
+      max-request-size: 20MB
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+server:
+  address: ${APP_BIND_ADDRESS:127.0.0.1}
+  port: ${APP_PORT:8080}
+  servlet:
+    session:
+      timeout: 30m
+      tracking-modes: cookie
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${APP_SECURE_COOKIE:false}
+  error:
+    include-message: never
+    include-stacktrace: never
+app:
+  admin:
+    username: ${APP_ADMIN_USERNAME:admin}
+    password: ${APP_ADMIN_PASSWORD:}
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    bucket: ${MINIO_BUCKET:enterprise-kb}
+  dify:
+    base-url: ${DIFY_BASE_URL:https://api.dify.ai/v1}
+    knowledge-key: ${DIFY_KNOWLEDGE_KEY:}
+    chat-keys: '${DIFY_CHAT_KEYS:}'
+    connect-timeout-ms: ${APP_DIFY_CONNECT_TIMEOUT_MS:5000}
+    read-timeout-ms: ${APP_DIFY_READ_TIMEOUT_MS:90000}
+  jobs:
+    enabled: ${APP_JOBS_ENABLED:true}
+    delay-ms: ${APP_JOB_DELAY_MS:3500}

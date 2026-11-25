@@ -1,0 +1,89 @@
+name: zhiyuan
+services:
+  mariadb:
+    image: mariadb:10.5.29
+    environment:
+      MARIADB_DATABASE: enterprise_kb
+      MARIADB_USER: enterprise_kb
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.deploy}
+      MARIADB_RANDOM_ROOT_PASSWORD: "1"
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+    volumes:
+      - database:/var/lib/mysql
+    restart: unless-stopped
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env.deploy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env.deploy}
+    volumes:
+      - objects:/data
+    restart: unless-stopped
+  minio-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_started
+    entrypoint: ["/bin/sh", "/bootstrap/init-minio.sh"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env.deploy}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env.deploy}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.deploy}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.deploy}
+    volumes:
+      - ./init-minio.sh:/bootstrap/init-minio.sh:ro
+      - ./minio-policy.json:/bootstrap/minio-policy.json:ro
+    restart: "no"
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      APP_BIND_ADDRESS: "0.0.0.0"
+      APP_PORT: "8080"
+      APP_SECURE_COOKIE: "true"
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-}
+      DB_URL: jdbc:mariadb://mariadb:3306/enterprise_kb
+      DB_USER: enterprise_kb
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env.deploy}
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_BUCKET: enterprise-kb
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?Set MINIO_ACCESS_KEY in .env.deploy}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?Set MINIO_SECRET_KEY in .env.deploy}
+      DIFY_BASE_URL: ${DIFY_BASE_URL:-https://api.dify.ai/v1}
+      DIFY_KNOWLEDGE_KEY: ${DIFY_KNOWLEDGE_KEY:?Set DIFY_KNOWLEDGE_KEY in .env.deploy}
+      DIFY_CHAT_KEYS: ${DIFY_CHAT_KEYS:?Set DIFY_CHAT_KEYS in .env.deploy}
+      TZ: Asia/Shanghai
+    restart: unless-stopped
+  caddy:
+    image: caddy:2-alpine
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?Set PUBLIC_DOMAIN in .env.deploy}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls_data:/data
+      - tls_config:/config
+    restart: unless-stopped
+volumes:
+  database:
+  objects:
+  tls_data:
+  tls_config:
